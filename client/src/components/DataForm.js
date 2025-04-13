@@ -1,332 +1,311 @@
-// client/src/components/DataForm.js
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { toast } from 'react-toastify';
 import SearchResults from './SearchResults';
 
-const API_URL = '/api';
+function DataForm() {
+  const initialFormData = {
+    code: '',
+    personName: '',
+    link: '',
+    description: '',
+    status: 'Online'
+  };
 
-const initialFormState = {
-  code: '',
-  personName: '',
-  link: '',
-  description: '',
-  status: 'ONLINE'
-};
-
-const DataForm = () => {
-  const [formData, setFormData] = useState(initialFormState);
-  const [originalData, setOriginalData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState(initialFormData);
+  const [isUpdate, setIsUpdate] = useState(false);
+  const [originalData, setOriginalData] = useState({});
   const [modifiedFields, setModifiedFields] = useState({});
   const [searchResults, setSearchResults] = useState([]);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [errors, setErrors] = useState({});
+  const [searchType, setSearchType] = useState('code'); // 'code' or 'name'
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState({ text: '', type: '' });
 
-  // Handle input changes
+  const resetForm = () => {
+    setFormData(initialFormData);
+    setIsUpdate(false);
+    setOriginalData({});
+    setModifiedFields({});
+    setSearchResults([]);
+    setMessage({ text: '', type: '' });
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
+    let processedValue = value;
     
-    // Update form data
-    setFormData({
-      ...formData,
-      [name]: value
-    });
-    
-    // Track modified fields if we're editing an existing record
-    if (originalData) {
-      if (name === 'code') {
-        // Can't modify code
-        return;
-      }
-      
-      // Check if the value is different from the original
-      if (originalData[name] !== value) {
-        setModifiedFields({
-          ...modifiedFields,
-          [name]: true
-        });
-      } else {
-        // If value matches original, remove from modified fields
-        const updatedModifiedFields = { ...modifiedFields };
-        delete updatedModifiedFields[name];
-        setModifiedFields(updatedModifiedFields);
-      }
+    // Make code and personName uppercase
+    if (name === 'code' || name === 'personName') {
+      processedValue = value.toUpperCase();
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      [name]: processedValue
+    }));
+
+    // Track modified fields for visual feedback
+    if (isUpdate && originalData[name] !== processedValue) {
+      setModifiedFields(prev => ({
+        ...prev,
+        [name]: true
+      }));
+    } else if (isUpdate) {
+      setModifiedFields(prev => {
+        const updated = { ...prev };
+        delete updated[name];
+        return updated;
+      });
+    }
+
+    // Search by code or person name
+    if (name === 'code' && processedValue.length >= 2) {
+      searchByCode(processedValue);
+      setSearchType('code');
+    } else if (name === 'personName' && processedValue.length >= 2) {
+      searchByName(processedValue);
+      setSearchType('name');
     }
   };
 
-  // Fetch record by code
-  const fetchRecordByCode = async (code) => {
-    if (!code) return;
-    
+  const searchByCode = async (code) => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_URL}/records/${code}`);
-      
-      // Fill form with fetched data
-      setFormData(response.data);
-      setOriginalData(response.data);
-      setModifiedFields({});
-      setIsUpdating(true);
-      setErrors({});
-      
-    } catch (error) {
-      if (error.response && error.response.status === 404) {
-        // Code not found, keep the entered code but reset other fields
-        setFormData({
-          ...initialFormState,
-          code: code.toUpperCase()
-        });
-        setOriginalData(null);
-        setModifiedFields({});
-        setIsUpdating(false);
-      } else {
-        toast.error('Error fetching record');
-        console.error(error);
+      const response = await fetch(`/api/search/code/${code}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.length === 1) {
+          // Exact match, fill the form
+          fillForm(data[0]);
+          setSearchResults([]);
+        } else {
+          // Show multiple results
+          setSearchResults(data);
+        }
       }
+    } catch (error) {
+      console.error('Error searching by code:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Search records by person name
   const searchByName = async (name) => {
-    if (!name || name.length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    
     try {
       setLoading(true);
-      const response = await axios.get(`${API_URL}/search/name/${name}`);
-      setSearchResults(response.data);
+      const response = await fetch(`/api/search/name/${name}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSearchResults(data);
+      }
     } catch (error) {
-      toast.error('Error searching records');
-      console.error(error);
+      console.error('Error searching by name:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle code input blur event
-  const handleCodeBlur = () => {
-    const { code } = formData;
-    if (code && code.trim() !== '') {
-      fetchRecordByCode(code);
-    }
+  const fillForm = (data) => {
+    setFormData({
+      code: data.code,
+      personName: data.personName,
+      link: data.link || '',
+      description: data.description || '',
+      status: data.status
+    });
+    setOriginalData({
+      code: data.code,
+      personName: data.personName,
+      link: data.link || '',
+      description: data.description || '',
+      status: data.status,
+      _id: data._id
+    });
+    setIsUpdate(true);
+    setModifiedFields({});
   };
 
-  // Handle name input change with debounce for search
-  useEffect(() => {
-    const { personName } = formData;
-    
-    const timeoutId = setTimeout(() => {
-      searchByName(personName);
-    }, 500);
-    
-    return () => clearTimeout(timeoutId);
-  }, [formData.personName]);
-
-  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validate form
-    const newErrors = {};
-    if (!formData.code) newErrors.code = 'Code is required';
-    if (!formData.personName) newErrors.personName = 'Name is required';
-    
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-    
+    setLoading(true);
+    setMessage({ text: '', type: '' });
+
     try {
-      setLoading(true);
-      
-      if (isUpdating) {
+      if (isUpdate) {
         // Update existing record
-        await axios.put(
-          `${API_URL}/records/${formData.code}`,
-          formData
-        );
-        toast.success('Record updated successfully');
+        const response = await fetch(`/api/data/${originalData._id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        });
+
+        if (response.ok) {
+          setMessage({ text: 'Record updated successfully!', type: 'success' });
+          resetForm();
+        } else {
+          const error = await response.json();
+          setMessage({ text: error.message || 'Failed to update record', type: 'danger' });
+        }
       } else {
         // Create new record
-        await axios.post(`${API_URL}/records`, formData);
-        toast.success('Record created successfully');
+        const response = await fetch('/api/data', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        });
+
+        if (response.ok) {
+          setMessage({ text: 'Record created successfully!', type: 'success' });
+          resetForm();
+        } else {
+          const error = await response.json();
+          setMessage({ text: error.message || 'Failed to create record', type: 'danger' });
+        }
       }
-      
-      // Reset form and states
-      setFormData(initialFormState);
-      setOriginalData(null);
-      setModifiedFields({});
-      setIsUpdating(false);
-      setErrors({});
-      setSearchResults([]);
-      
     } catch (error) {
-      if (error.response && error.response.data.message) {
-        toast.error(error.response.data.message);
-      } else {
-        toast.error('Error saving record');
-      }
-      console.error(error);
+      console.error('Error:', error);
+      setMessage({ text: 'An error occurred. Please try again.', type: 'danger' });
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle clear form
-  const handleClear = () => {
-    setFormData(initialFormState);
-    setOriginalData(null);
-    setModifiedFields({});
-    setIsUpdating(false);
-    setErrors({});
+  const handleSelectResult = (item) => {
+    fillForm(item);
     setSearchResults([]);
   };
 
-  // Handle selecting a search result
-  const handleSelectResult = (result) => {
-    setFormData(result);
-    setOriginalData(result);
-    setModifiedFields({});
-    setIsUpdating(true);
-    setErrors({});
-    setSearchResults([]);
-  };
+  // Clear search results when form is reset
+  useEffect(() => {
+    if (!formData.code && !formData.personName) {
+      setSearchResults([]);
+    }
+  }, [formData.code, formData.personName]);
 
   return (
     <div className="form-container">
-      <h2>{isUpdating ? 'Update Record' : 'Create New Record'}</h2>
+      <h2 className="form-title">{isUpdate ? 'Update Record' : 'Create New Record'}</h2>
       
-      {loading ? (
-        <div className="loading"></div>
-      ) : (
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="code">Code</label>
-            <input
-              type="text"
-              id="code"
-              name="code"
-              className="form-control"
-              value={formData.code}
-              onChange={handleChange}
-              onBlur={handleCodeBlur}
-              disabled={isUpdating}
-              placeholder="Enter code (e.g., ABC-123)"
-            />
-            {errors.code && <div className="error">{errors.code}</div>}
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="personName">Person Name</label>
-            <input
-              type="text"
-              id="personName"
-              name="personName"
-              className={`form-control ${modifiedFields.personName ? 'modified' : ''}`}
-              value={formData.personName}
-              onChange={handleChange}
-              placeholder="Enter person name"
-            />
-            {errors.personName && <div className="error">{errors.personName}</div>}
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="link">Link (Optional)</label>
-            <input
-              type="text"
-              id="link"
-              name="link"
-              className={`form-control ${modifiedFields.link ? 'modified' : ''}`}
-              value={formData.link}
-              onChange={handleChange}
-              placeholder="Enter link (optional)"
-            />
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="description">Description (Optional)</label>
-            <textarea
-              id="description"
-              name="description"
-              className={`form-control ${modifiedFields.description ? 'modified' : ''}`}
-              value={formData.description}
-              onChange={handleChange}
-              rows="4"
-              placeholder="Enter description (optional)"
-            ></textarea>
-          </div>
-          
-          <div className="form-group">
-            <label>Status</label>
-            <div className="radio-group">
-              <div className="radio-option">
-                <input
-                  type="radio"
-                  id="statusOnline"
-                  name="status"
-                  value="ONLINE"
-                  checked={formData.status === 'ONLINE'}
-                  onChange={handleChange}
-                />
-                <label htmlFor="statusOnline">Online</label>
-              </div>
-              
-              <div className="radio-option">
-                <input
-                  type="radio"
-                  id="statusDownloaded"
-                  name="status"
-                  value="DOWNLOADED"
-                  checked={formData.status === 'DOWNLOADED'}
-                  onChange={handleChange}
-                />
-                <label htmlFor="statusDownloaded">Downloaded</label>
-              </div>
-              
-              <div className="radio-option">
-                <input
-                  type="radio"
-                  id="statusWatched"
-                  name="status"
-                  value="WATCHED"
-                  checked={formData.status === 'WATCHED'}
-                  onChange={handleChange}
-                />
-                <label htmlFor="statusWatched">Watched</label>
-              </div>
-            </div>
-          </div>
-          
-          <div className="buttons-container">
-            <button
-              type="button"
-              className="btn btn-clear"
-              onClick={handleClear}
-            >
-              Clear
-            </button>
-            
-            <button
-              type="submit"
-              className={`btn ${isUpdating ? 'btn-update' : 'btn-primary'}`}
-            >
-              {isUpdating ? 'Update' : 'Save'}
-            </button>
-          </div>
-        </form>
+      {message.text && (
+        <div className={`alert alert-${message.type}`} role="alert">
+          {message.text}
+        </div>
       )}
       
-      <SearchResults 
-        results={searchResults} 
-        onSelectResult={handleSelectResult} 
-      />
+      <form onSubmit={handleSubmit}>
+        <div className="mb-3">
+          <label htmlFor="code" className="form-label">Code*</label>
+          <input
+            type="text"
+            className={`form-control ${modifiedFields.code ? 'modified-field' : ''}`}
+            id="code"
+            name="code"
+            value={formData.code}
+            onChange={handleChange}
+            placeholder="Enter code (e.g., ABC-123)"
+            required
+          />
+        </div>
+        
+        <div className="mb-3">
+          <label htmlFor="personName" className="form-label">Person Name*</label>
+          <input
+            type="text"
+            className={`form-control ${modifiedFields.personName ? 'modified-field' : ''}`}
+            id="personName"
+            name="personName"
+            value={formData.personName}
+            onChange={handleChange}
+            placeholder="Enter person name"
+            required
+          />
+        </div>
+        
+        {searchType === 'name' && searchResults.length > 0 && (
+          <SearchResults results={searchResults} onSelect={handleSelectResult} />
+        )}
+        
+        <div className="mb-3">
+          <label htmlFor="link" className="form-label">Link (Optional)</label>
+          <input
+            type="url"
+            className={`form-control ${modifiedFields.link ? 'modified-field' : ''}`}
+            id="link"
+            name="link"
+            value={formData.link}
+            onChange={handleChange}
+            placeholder="Enter link"
+          />
+        </div>
+        
+        <div className="mb-3">
+          <label htmlFor="description" className="form-label">Description (Optional)</label>
+          <textarea
+            className={`form-control ${modifiedFields.description ? 'modified-field' : ''}`}
+            id="description"
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            rows="3"
+            placeholder="Enter description"
+          ></textarea>
+        </div>
+        
+        <div className="mb-3">
+          <label className="form-label">Status*</label>
+          <div className="d-flex gap-4">
+            {['Online', 'Downloaded', 'Watched'].map(option => (
+              <div className="form-check" key={option}>
+                <input
+                  className="form-check-input"
+                  type="radio"
+                  name="status"
+                  id={option}
+                  value={option}
+                  checked={formData.status === option}
+                  onChange={handleChange}
+                  required
+                />
+                <label className="form-check-label" htmlFor={option}>
+                  {option}
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        <div className="d-flex gap-2">
+          <button 
+            type="submit" 
+            className={`btn ${isUpdate ? 'update-button' : 'btn-primary'}`}
+            disabled={loading}
+          >
+            {loading ? (
+              <span>
+                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                {isUpdate ? 'Updating...' : 'Saving...'}
+              </span>
+            ) : (
+              isUpdate ? 'Update Record' : 'Save Record'
+            )}
+          </button>
+          
+          {isUpdate && (
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              onClick={resetForm}
+              disabled={loading}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      </form>
     </div>
   );
-};
+}
 
 export default DataForm;

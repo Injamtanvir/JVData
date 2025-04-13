@@ -1,0 +1,44 @@
+// PROJECT STRUCTURE
+/*
+code-tracker/
+├── client/ (Frontend)
+│   ├── public/
+│   │   ├── index.html
+│   │   └── favicon.ico
+│   ├── src/
+│   │   ├── App.js
+│   │   ├── index.js
+│   │   ├── components/
+│   │   │   ├── DataForm.js
+│   │   │   ├── SearchResults.js
+│   │   │   └── Navbar.js
+│   │   └── styles/
+│   │       └── main.css
+│   └── package.json
+├── server/ (Backend)
+│   ├── index.js
+│   ├── models/
+│   │   └── Data.js
+│   ├── routes/
+│   │   └── api.js
+│   ├── config/
+│   │   └── db.js
+│   └── package.json
+└── README.md
+*/
+
+
+
+
+
+
+
+
+
+
+
+// BACKEND PART
+
+
+
+
